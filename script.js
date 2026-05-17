@@ -2648,7 +2648,7 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
   // 7-3. AI追撃処理 処理全体の実行前に初回skip確認
   if (skillUser.AINormalAttack && !skipThisMonsterAction(skillUser) && skillUser.commandInput !== "skipThisTurn" && !hasAbnormality(skillUser)) {
     const skillsWithoutPursuit = ["黄泉の封印", "神獣の封印", "けがれの封印", "雪だるま", "氷の王国", "封印の光", "しはいのさくせん", "供物をささげる", "超魔改良", "ひかりの旋風"]; // 神獣の氷縛等ゴルアスは追撃あり
-    const skillsWithPursuit = ["火竜変化呪文先制", "オーバーホール"];
+    const skillsWithPursuit = ["火竜変化呪文先制", "オーバーホール", "狩人のまなざし", "属性代償の刻印", "体技代償の刻印", "キルトラップ", "諸刃の刻印"];
     // executingSkillが存在しなければ常にAIを出す それ以外の場合は特技の性質に依存
     if (!executingSkill || skillsWithPursuit.includes(executingSkill.name) || (!skillsWithoutPursuit.includes(executingSkill.name) && !(executingSkill.order && !isDamageExistingSkill(executingSkill)))) {
       let attackTimes =
@@ -3834,21 +3834,46 @@ async function processHit(assignedSkillUser, executingSkill, assignedSkillTarget
     if (executingSkill.appliedEffect && executingSkill.appliedEffect !== "radiantWave" && executingSkill.appliedEffect !== "divineWave" && executingSkill.appliedEffect !== "disruptiveWave") {
       applyBuff(buffTarget, structuredClone(executingSkill.appliedEffect), skillUser, isReflection, false, isDamageExisting);
     }
-    // くじけぬ解除処理を行い、バフ表示を更新
-    if (executingSkill.deleteUnbreakableProbability) {
+    // バフが変更されたかを管理するフラグ
+    let isBuffTargetChanged = false;
+    let isSkillUserChanged = false;
+
+    // くじけぬ解除処理
+    if (executingSkill.deleteUnbreakableProbability && buffTarget.buffs.isUnbreakable !== undefined && !buffTarget.flags.isDead && !buffTarget.flags.isZombie) {
       if (Math.random() < executingSkill.deleteUnbreakableProbability) {
-          if (!buffTarget.flags.isDead && !buffTarget.flags.isZombie) {
-           delete buffTarget.buffs.isUnbreakable;
-        }
-        await updateMonsterBuffsDisplay(buffTarget);
+        delete buffTarget.buffs.isUnbreakable;
+        isBuffTargetChanged = true;
       }
     }
-    // act処理を行い、barとバフ表示を更新
+    // ため解除処理（亡者も適用対象とした）
+    if (executingSkill.tensionClearProbability && !buffTarget.flags.isDead) {
+      if (Math.random() < executingSkill.tensionClearProbability) {
+        const targetBuffs = ['powerCharge', 'manaBoost', 'breathCharge'];
+        for (const buffName of targetBuffs) {
+          const buff = buffTarget.buffs[buffName];
+          if (buff && !buff.immuneToTensionClear) {
+            delete buffTarget.buffs[buffName];
+            isBuffTargetChanged = true;
+          }
+        }
+      }
+    }
+
+    // act処理を行い、barなどを更新
     if (executingSkill.act) {
       await executingSkill.act(skillUser, buffTarget);
       updateCurrentStatus(skillUser);
-      await updateMonsterBuffsDisplay(skillUser);
       updateCurrentStatus(buffTarget);
+      // actが実行された場合は、確実にバフ表示を更新する
+      isSkillUserChanged = true;
+      isBuffTargetChanged = true;
+    }
+
+    // すべての処理が完了後、バフが一回でも変更された場合のみバフ表示を更新
+    if (isSkillUserChanged) {
+      await updateMonsterBuffsDisplay(skillUser);
+    }
+    if (isBuffTargetChanged) {
       await updateMonsterBuffsDisplay(buffTarget);
     }
   }
@@ -6280,7 +6305,7 @@ const monsters = [
     weight: 28,
     status: { HP: 909, MP: 368, atk: 449, def: 675, spd: 296, int: 286 },
     initialSkill: ["むらくもの息吹", "獄炎の息吹", "ほとばしる暗闇", "防刃の守り"],
-    anotherSkills: ["五連竜牙弾", "オーロラブレス"],
+    anotherSkills: ["五連竜牙弾", "オーロラブレス", "大蛇の構え"],
     defaultGear: "kudaki",
     attribute: {
       initialBuffs: {
@@ -12720,7 +12745,8 @@ const skill = [
     appliedEffect: { defUp: { strength: -1 } }, //radiantWave divineWave disruptiveWave
     zakiProbability: 0.78,
     absorptionRatio: 0.5,
-    deleteUnbreakableProbability: 1, //処理としてはactと同じ、分離
+    deleteUnbreakableProbability: 1, // 処理としてはactと同じ、分離
+    tensionClearProbability: 1, // 処理としてはactと同じ、分離
     act: function (skillUser, skillTarget) {
       console.log("hoge");
     },
@@ -13333,6 +13359,7 @@ const skill = [
     targetTeam: "enemy",
     hitNum: 3,
     MPcost: 57,
+    appliedEffect: "divineWave",    
   },
   {
     name: "煉獄火炎",
@@ -13401,11 +13428,7 @@ const skill = [
     MPcost: 82,
     damageByLevel: true,
     appliedEffect: "disruptiveWave",
-    act: function (skillUser, skillTarget) {
-      delete skillTarget.buffs.powerCharge;
-      delete skillTarget.buffs.manaBoost;
-      delete skillTarget.buffs.breathCharge;
-    },
+    tensionClearProbability: 1,
   },
   {
     name: "ダイヤモンドダスト",
@@ -14434,11 +14457,7 @@ const skill = [
     MPcost: 82,
     damageByLevel: true,
     appliedEffect: "disruptiveWave",
-    act: function (skillUser, skillTarget) {
-      delete skillTarget.buffs.powerCharge;
-      delete skillTarget.buffs.manaBoost;
-      delete skillTarget.buffs.breathCharge;
-    },
+    tensionClearProbability: 1,
     damageMultiplier: function (skillUser, skillTarget, isReflection) {
       if (isReflection) {
         return 1; // 反射時は1倍とした
@@ -16824,7 +16843,7 @@ const skill = [
     preemptiveGroup: 5,
     MPcost: 37,
     appliedEffect: {
-      powerCharge: { strength: 2, duration: 3 },
+      powerCharge: { strength: 2, duration: 3, immuneToTensionClear: true },
       slashReflection: { strength: 1, duration: 2, unDispellable: true, removeAtTurnStart: true, isKanta: true },
       spellReflection: { strength: 1, duration: 2, unDispellable: true, removeAtTurnStart: true },
       damageLimit: { unDispellable: true, strength: 200, duration: 2 },
@@ -18083,6 +18102,19 @@ const skill = [
     isOneTimeUse: true,
     appliedEffect: { protection: { strength: 0.9, duration: 2, removeAtTurnStart: true }, manaBoost: { strength: 2 }, asleepBreakBoost: { strength: 1, duration: 2, removeAtTurnStart: true } },
     //本来は2R行動後にブレイクは消失
+  },
+  {
+    name: "大蛇の構え",
+    type: "martial",
+    howToCalculate: "none",
+    element: "none",
+    targetType: "self",
+    targetTeam: "ally",
+    MPcost: 37,
+    order: "preemptive",
+    preemptiveGroup: 5,
+    isOneTimeUse: true,
+    appliedEffect: { protection: { strength: 0.7, duration: 2, removeAtTurnStart: true }, breathCharge: { strength: 2, immuneToTensionClear: true } },
   },
   {
     name: "ギラマータ",
@@ -25429,7 +25461,7 @@ function createSDappliedEffect(skillInfo) {
       skillDescriptionText += "命中時　状態変化・くじけぬ心解除　";
     } else if (skillInfo.name === "絶望の天舞") {
       skillDescriptionText += "命中時　状態変化解除（上位効果）・くじけぬ心解除　";
-    } else if (skillInfo.name === "ほとばしる暗闇" || skillInfo.name === "すさまじいオーラ") {
+    } else if (skillInfo.tensionClearProbability) {
       skillDescriptionText += "命中時　状態変化・ため状態を解除する　";
     } else if (appliedEffectText) {
       skillDescriptionText += `命中時　${appliedEffectText}`;
