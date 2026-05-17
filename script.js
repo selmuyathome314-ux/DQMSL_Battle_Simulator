@@ -2579,10 +2579,8 @@ async function processMonsterAction(skillUser) {
   // 6. スキル実行処理
   console.log(`${skillUser.name}のコマンド行動: ${executingSkill.name}を使用`);
   displaySkillExecutionMessage(skillUser, executingSkill);
-  if (executingSkill.name === "ぼうぎょ") {
-    await sleep(40); // スキル実行前に待機時間を設ける
-  } else {
-    await sleep(200);
+  if (executingSkill.name !== "ぼうぎょ") {
+    await sleep(200); // スキル実行前に待機時間を設ける
   }
   const skillTargetTeam = executingSkill.targetTeam === "enemy" ? parties[skillUser.enemyTeamID] : parties[skillUser.teamID];
   let executedSkills = [];
@@ -2711,7 +2709,7 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
         skillsToExecute.push({ skillInfo: executingSkill, firstMessage: `もう一度 ${executingSkill.name}を はなった！`, lastMessage: "" });
       }
     }
-    // skill本体に依存する追加特技(仮) 反射で状態異常になっても発動 反射死しても使用する模様?   todo: 破壊衝動解除では追加せず、復活後限定
+    // skill本体に依存する追加特技(仮) 反射で状態異常になっても発動 反射死しても使用する模様?
     if (skillUser.flags.revivedByDestructiveImpulse && ["昏睡のカギ爪"].includes(executingSkill.name)) {
       skillsToExecute.push({ skillInfo: executingSkill, firstMessage: "破壊衝動の効果により", lastMessage: `もう一度 ${executingSkill.name}を はなった！` });
     } else {
@@ -22577,6 +22575,12 @@ const gear = [
     weight: 0,
     status: { HP: 0, MP: 0, atk: 0, def: 0, spd: 15, int: 0 },
   },
+  {
+    name: "ハートオーブ",
+    id: "heartOrb",
+    weight: 0,
+    status: { HP: 0, MP: 0, atk: 0, def: 0, spd: 15, int: 0 },
+  },
 ];
 
 // 必要ならばasyncにするのに注意
@@ -22696,6 +22700,11 @@ const gearAbilities = {
   clubOrb: {
     initialAbilities: async function (skillUser) {
       skillUser.attribute.additionalPermanentBuffs.martialBarrier = { strength: 1, probability: 0.25, noMissDisplay: true };
+    },
+  },
+  heartOrb: {
+    initialAbilities: async function (skillUser) {
+      skillUser.attribute.additionalPermanentBuffs.autoRevive =  { keepOnDeath: true, strength: 0.5, probability: 0.1, noMissDisplay: true };
     },
   },
 };
@@ -25490,6 +25499,10 @@ function createSDappliedEffect(skillInfo) {
     // みがわり特効
     if (skillInfo.substituteBreaker) {
       skillDescriptionText += `みがわり状態の敵に　威力${skillInfo.substituteBreaker}倍　`;
+    }
+    // アンカーボーナス
+    if (skillInfo.anchorBonus) {
+      skillDescriptionText += `最後の行動なら　威力${skillInfo.anchorBonus}倍　`;
     }
     // 状態異常特効・マ素特効
     // 1. データの集約
