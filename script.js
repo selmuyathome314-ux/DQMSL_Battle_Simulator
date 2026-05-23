@@ -1954,7 +1954,7 @@ function applyBuff(buffTarget, newBuff, skillUser = null, isReflection = false, 
         deleteSubstitute(buffTarget);
         // 現状、dispellableByAbnormality指定された予測系も解除
       }
-      // マホカンは自動でカンタに
+      // マホカンは自動でカンタに（ゲマは本来呪文予測）
       if (buffName === "spellReflection") {
         buffTarget.buffs.spellReflection.isKanta = true;
       }
@@ -1981,6 +1981,14 @@ function applyBuff(buffTarget, newBuff, skillUser = null, isReflection = false, 
       // 既存バフが軽度毒であり、新規付与したのも軽度毒の場合、猛毒化
       if (buffName === "poisoned" && currentBuff && currentBuff.isLight && buffData.isLight) {
         delete buffTarget.buffs.poisoned.isLight;
+      }
+      // HP吸収先の指定 反射時はbuffTarget本人を吸収者として、自分自身にHPダメージ後、自身を回復する
+      if (buffName === "HPabsorption" && skillUser) {
+        buffTarget.buffs.HPabsorption.absorber = isReflection ? buffTarget : skillUser;
+      }
+      // MP吸収先の指定 反射時はbuffTarget本人を吸収者として、自分自身にMPダメージ後、自身を回復する
+      if (buffName === "MPabsorption" && skillUser) {
+        buffTarget.buffs.MPabsorption.absorber = isReflection ? buffTarget : skillUser;
       }
     }
     // 付与成功時処理 duration設定
@@ -2863,13 +2871,15 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
   }
-  // 7-12. MP吸収処理(wip)
+  // 7-12. MP吸収処理
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.MPabsorption) {
     await sleep(400);
     const dotDamageValue = skillUser.buffs.MPabsorption.strength;
     displayMessage(`${skillUser.name}は`, "MPを吸収された！");
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
+    await sleep(250);
+    applyDamage(skillUser.buffs.MPabsorption.absorber, dotDamageValue, -1, true);
   }
   // 刻印・毒・継続の共通処理
   async function applyDotDamage(skillUser, damageRatio, message, isRetribution = false) {
@@ -3332,6 +3342,7 @@ function handleDeath(target, hideDeathMessage = false, applySkipDeathAbility = f
   target.flags.beforeDeathActionCheck = true;
   delete target.flags.guard;
   delete target.flags.hazamaNeverKilled;
+  deleteSubstitute(target);
   // 毒 供物 反射でskipDeathAbilityが渡された場合、processDeathAction内で死亡時発動を実行しないマーカーを付与
   if (applySkipDeathAbility) {
     target.flags.skipDeathAbility = true;
@@ -3342,7 +3353,6 @@ function handleDeath(target, hideDeathMessage = false, applySkipDeathAbility = f
 
   // 死亡時のバフを記録 都度更新
   target.flags.buffKeysOnDeath = Object.keys(target.buffs);
-
   delete target.buffs.countDown;
 
   ++fieldState.deathCount[target.teamID];
@@ -3359,12 +3369,25 @@ function handleDeath(target, hideDeathMessage = false, applySkipDeathAbility = f
   }
   console.log(`party${target.teamID}の${target.name}の死亡でカウントが${fieldState.deathCount[target.teamID]}になった`);
 
-  //供物を戻す
+  // 供物を戻す
   if (target.skill[3] === "供物をささげる") {
     target.skill[3] = target.defaultSkill[3];
   }
-
-  deleteSubstitute(target);
+  // 自身が吸収中のHP・MP吸収を解除 タッグやリザオの挙動は不明だが解除することとした
+  for (const party of parties) {
+    for (const monster of party) {
+      let isUpdated = false;
+      if (monster.buffs.HPabsorption?.absorber === target) {
+        delete monster.buffs.HPabsorption;
+        isUpdated = true;
+      }
+      if (monster.buffs.MPabsorption?.absorber === target) {
+        delete monster.buffs.MPabsorption;
+        isUpdated = true;
+      }
+      if (isUpdated) updateMonsterBuffsDisplay(monster);
+    }
+  }
 
   // リザオ蘇生もtag変化もリザオ蘇生もしない かつ亡者化予定の場合flagを付与 applySkipDeathAbilityがtrue指定(毒 供物 反射)の場合は亡者化しない
   if (
