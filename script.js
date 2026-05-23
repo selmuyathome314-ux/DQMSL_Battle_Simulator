@@ -1772,6 +1772,26 @@ function applyBuff(buffTarget, newBuff, skillUser = null, isReflection = false, 
       }
     }
 
+    // randomStrengthsが存在する場合、buffData.strengthを更新（重み付き抽選、合計値1でなくてもOK）
+    if (Array.isArray(buffData.randomStrengths) && buffData.randomStrengths.length > 0) {
+      // 1. 全ての確率（重み）の合計値を算出
+      const totalProbability = buffData.randomStrengths.reduce((sum, item) => sum + (item.probability ?? 0), 0);
+      if (totalProbability > 0) {
+        // 2. 0 から 合計値 までの範囲で乱数を決定
+        const rand = Math.random() * totalProbability;
+        let cumulativeProbability = 0;
+        for (const candidate of buffData.randomStrengths) {
+          cumulativeProbability += candidate.probability ?? 0;
+          if (rand < cumulativeProbability) {
+            buffData.strength = candidate.value;
+            break;
+          }
+        }
+      }
+      // 処理完了したrandomStrengthsを削除
+      delete buffData.randomStrengths;
+    }
+
     // 3. 確率判定成功時にバフ適用処理 バフ付与に付随する効果の処理もここで durationやstrengthによる比較で弾く処理も
     if (stackableBuffs.hasOwnProperty(buffName)) {
       // 3-1. 重ねがけ可能バフ
@@ -14298,9 +14318,9 @@ const skill = [
     targetTeam: "enemy",
     MPcost: 0,
     ignoreReflection: true,
-    appliedEffect: { martialBarrier: { strength: -1 }, breathBarrier: { strength: -1 } },
-    act: function (skillUser, skillTarget) {
-      applyBuff(skillTarget, { martialBarrier: { strength: -1, probability: 0.4 }, breathBarrier: { strength: -1, probability: 0.4 } });
+    appliedEffect: {
+      martialBarrier: { strength: -1, randomStrengths: [ { value: -1, probability: 0.6 }, { value: -2, probability: 0.4 } ] },
+      breathBarrier: { strength: -1, randomStrengths: [ { value: -1, probability: 0.6 }, { value: -2, probability: 0.4 } ] },
     },
   },
   {
@@ -14957,10 +14977,7 @@ const skill = [
     targetType: "all",
     targetTeam: "enemy",
     MPcost: 85,
-    appliedEffect: { spdUp: { strength: -1, probability: 0.92 } },
-    act: function (skillUser, skillTarget) {
-      applyBuff(skillTarget, { spdUp: { strength: -1, probability: 0.48, noMissDisplay: true } });
-    },
+    appliedEffect: { spdUp: { strength: -1, probability: 0.92, randomStrengths: [ { value: -1, probability: 0.44 }, { value: -2, probability: 0.48 } ] } },
   },
   {
     name: "リベンジアーツ",
@@ -25692,14 +25709,36 @@ function getBuffName(appliedEffect) {
     const buffData = appliedEffect[buffName];
 
     if (stackableBuffNameList[buffName]) {
-      if (buffData.strength > 0 || buffName === "maso") {
-        stackableBuffsToApply.push(`${stackableBuffNameList[buffName]}`);
-        stackableBuffsStrength = buffData.strength || 1;
+      // バフかどうかの判定フラグ
+      const isBuff = buffData.strength > 0 || buffName === "maso";
+
+      // 1. 対象となる配列の決定と追加
+      const targetArray = isBuff ? stackableBuffsToApply : stackabledeBuffsToApply;
+      targetArray.push(stackableBuffNameList[buffName]);
+
+      // 2. 基準強度の算出
+      const multiplier = isBuff ? 1 : -1;
+      const baseStrength = (buffData.strength * multiplier) || 1;
+
+      // 3. ランダム強度を含めた最終強度の算出
+      let finalStrength;
+      if (Array.isArray(buffData.randomStrengths) && buffData.randomStrengths.length > 0) {
+        const values = buffData.randomStrengths.map(item => item.value);
+        // バフなら最大値、デバフなら最小値の反転（=最大減少値）を取得
+        const limitVal = isBuff ? Math.max(...values) : Math.min(...values) * -1;
+        finalStrength = `${baseStrength}〜${limitVal}`;
       } else {
-        stackabledeBuffsToApply.push(`${stackableBuffNameList[buffName]}`);
-        stackabledeBuffsStrength = buffData.strength * -1 || 1;
+        finalStrength = baseStrength;
       }
-      // "確率で"表示をするか
+
+      // 4. 該当する変数へ強度を代入
+      if (isBuff) {
+        stackableBuffsStrength = finalStrength;
+      } else {
+        stackabledeBuffsStrength = finalStrength;
+      }
+
+      // 5. "確率で"表示フラグの更新
       if (buffData.probability || (buffName === "maso" && !buffData.strength)) {
         stackableProbabilityExists = true;
       }
