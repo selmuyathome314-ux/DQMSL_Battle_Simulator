@@ -2737,10 +2737,16 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
         skillsToExecute.push({ skillInfo: executingSkill, firstMessage: `もう一度 ${executingSkill.name}を はなった！`, lastMessage: "" });
       }
     }
-    // skill本体に依存する追加特技(仮) 反射で状態異常になっても発動 反射死しても使用する模様?
+    // skill本体の性質によって追加される特技 反射で状態異常になっても発動 反射死しても使用する模様?
     if (skillUser.flags.revivedByDestructiveImpulse && ["昏睡のカギ爪"].includes(executingSkill.name)) {
       skillsToExecute.push({ skillInfo: executingSkill, firstMessage: "破壊衝動の効果により", lastMessage: `もう一度 ${executingSkill.name}を はなった！` });
+    } else if (["クアトロマダンテ"].includes(executingSkill.name)) {
+      // クアトロマダンテは3回追加
+      for (let i = 0; i < 3; i++) {
+        skillsToExecute.push({ skillInfo: executingSkill, firstMessage: "", lastMessage: ""});
+      }
     } else {
+      // それ以外の場合、殺りくの雷刃追加可否を判定
       pushSatsuriku(skillUser, executingSkill);
     }
 
@@ -3536,10 +3542,6 @@ async function executeSkill(
     }
 
     let skillTarget = assignedTarget;
-    // followingSkillのtargetをnull化してランダムにする(暫定的) クアトロのみ random特技(イフシバ)はAI追撃後に移行
-    if (isFollowingSkill && (currentSkill.targetType === "random" || currentSkill.howToCalculate === "MP")) {
-      skillTarget = null;
-    }
 
     // ヒット処理前に一括で実行する処理
     if (currentSkill.onStart) {
@@ -3552,7 +3554,7 @@ async function executeSkill(
 
     // ヒット処理後に一括で実行する処理 生存にかかわらず、行動skip判定前に実行
     if (currentSkill.onComplete) {
-      await currentSkill.onComplete(skillUser);
+      await currentSkill.onComplete(skillUser, isMonsterAction);
     }
 
     // onComplete実行後に全滅判定 全滅時も実行する起爆装置等はfollowingがないのでこのままでOK
@@ -3576,12 +3578,6 @@ async function executeSkill(
       }
       currentSkill = findSkillByName(currentSkill.followingSkill);
       isFollowingSkill = true;
-      // クアトロ用 初撃のMP usedを引き継ぎ続けないようnull化 反撃対象から外す 双撃等のtarget固定を外す target本体のランダム化はrandom特技のfollowingと同時に
-      if (currentSkill.howToCalculate === "MP") {
-        MPused = null;
-        isMonsterAction = false;
-        executedSingleSkillTarget = [];
-      }
     } else {
       break;
     }
@@ -19011,56 +19007,12 @@ const skill = [
     targetTeam: "enemy",
     MPcostRatio: 0.1,
     ignoreReflection: true,
-    followingSkill: "クアトロマダンテ2発目",
-  },
-  {
-    name: "クアトロマダンテ2発目",
-    type: "spell",
-    howToCalculate: "MP",
-    MPDamageRatio: 10.75,
-    element: "none",
-    targetType: "single",
-    targetTeam: "enemy",
-    MPcostRatio: 0.1,
-    ignoreReflection: true,
-    followingSkill: "クアトロマダンテ3発目",
-    onComplete: async function (skillUser) {
-      const MPused = calculateMPcost(skillUser, findSkillByName("クアトロマダンテ"));
-      skillUser.currentStatus.MP -= MPused;
-      updateMonsterBar(skillUser);
-    },
-  },
-  {
-    name: "クアトロマダンテ3発目",
-    type: "spell",
-    howToCalculate: "MP",
-    MPDamageRatio: 10.75,
-    element: "none",
-    targetType: "single",
-    targetTeam: "enemy",
-    MPcostRatio: 0.1,
-    ignoreReflection: true,
-    followingSkill: "クアトロマダンテ4発目",
-    onComplete: async function (skillUser) {
-      const MPused = calculateMPcost(skillUser, findSkillByName("クアトロマダンテ"));
-      skillUser.currentStatus.MP -= MPused;
-      updateMonsterBar(skillUser);
-    },
-  },
-  {
-    name: "クアトロマダンテ4発目",
-    type: "spell",
-    howToCalculate: "MP",
-    MPDamageRatio: 10.75,
-    element: "none",
-    targetType: "single",
-    targetTeam: "enemy",
-    MPcostRatio: 0.1,
-    ignoreReflection: true,
-    onComplete: async function (skillUser) {
-      const MPused = calculateMPcost(skillUser, findSkillByName("クアトロマダンテ"));
-      skillUser.currentStatus.MP -= MPused;
-      updateMonsterBar(skillUser);
+    onComplete: async function (skillUser, isMonsterAction) {
+      if (!isMonsterAction) {
+        const MPused = calculateMPcost(skillUser, findSkillByName("クアトロマダンテ"));
+        skillUser.currentStatus.MP -= MPused;
+        updateMonsterBar(skillUser);
+      }
     },
   },
   {
@@ -24845,7 +24797,7 @@ function isSkillUnavailableForAI(skillName) {
     "きょうふのはもん",
     "リザオラル", // isHealSkillを指定しているため、いのちだいじに使用特技に対象に選ばれることを仮防止
   ];
-  const availableFollowingSkillsOnAI = ["必殺の双撃", "無双のつるぎ", "いてつくマヒャド", "クアトロマダンテ"];
+  const availableFollowingSkillsOnAI = ["必殺の双撃", "無双のつるぎ", "いてつくマヒャド"];
   return (
     unavailableSkillsOnAI.includes(skillName) ||
     isNoDamageWaveSkill(skillInfo) ||
@@ -25341,7 +25293,7 @@ function displaySkillDescription(skillUser, skillInfo, displaySkillName) {
     }
 
     // 元skillのdescriptionが存在している場合のみ 現状はみだしているものが多い
-    if ((SDmain || SDappliedEffect) && skillInfo.followingSkill && !["クアトロマダンテ"].includes(skillInfo.name)) {
+    if ((SDmain || SDappliedEffect) && skillInfo.followingSkill) {
       const followingSkill = findSkillByName(skillInfo.followingSkill);
       let Fmain = createSDmain(followingSkill);
       let FappliedEffect = createSDappliedEffect(followingSkill);
@@ -25820,9 +25772,6 @@ function getAvailableSkillsForOthers() {
     "真・天雷の舞い",
     "真・轟雷滅殺剣",
     "魂喰らい",
-    "クアトロマダンテ2発目",
-    "クアトロマダンテ3発目",
-    "クアトロマダンテ4発目",
   ];
   // MP0でも付与して良いもの
   const availableMP0skills = ["ひかりのたま", "苦悶の魔弾", "メラゾブレス", "暴れまわる", "うちくだく", "鬼眼砲", "正体をあらわす"];
