@@ -25569,7 +25569,6 @@ const abnormalityBuffNameList = {
   //powerChargeなど
   //damageLimit: `被ダメージ上限値${buffData.strength}`
   //statusLock: "状態変化を封じる",
-  //反射
   //familybuff
   //dodgeBuff
 
@@ -25600,20 +25599,20 @@ const abnormalityBuffNameList = {
   sacredBarrier: "状態異常無効",
   confusionBarrier: "混乱無効",
   mindBarrier: "行動停止無効",
-  /*
-  spellEvasion: "呪文無効状態",
-  slashEvasion: "斬撃無効状態",
-  martialEvasion: "体技無効状態",
-  breathEvasion: "息無効状態",
-  ritualEvasion: "儀式無効状態",
-  danceEvasion: "踊り無効状態",
-  spellReflection: "呪文反射状態",
-  slashReflection: "斬撃反射状態",
-  martialReflection: "体技反射状態",
-  breathReflection: "息反射状態",
-  ritualReflection: "儀式反射状態",
-  danceReflection: "踊り反射状態",
-  */
+
+  spellEvasion: "呪文無効",
+  slashEvasion: "斬撃無効",
+  martialEvasion: "体技無効",
+  breathEvasion: "息無効",
+  ritualEvasion: "儀式無効",
+  danceEvasion: "踊り無効",
+  spellReflection: "呪文反射",
+  slashReflection: "斬撃反射",
+  martialReflection: "体技反射",
+  breathReflection: "息反射",
+  ritualReflection: "儀式反射",
+  danceReflection: "踊り反射",
+
   continuousHealing: "HP継続回復",
   continuousMPHealing: "MP継続回復",
 };
