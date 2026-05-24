@@ -1526,6 +1526,7 @@ function applyBuff(buffTarget, newBuff, skillUser = null, isReflection = false, 
     "reviveBlock",
     "dotDamage",
     "dotMPdamage",
+    "HPabsorption",
     "MPabsorption",
     "healBlock",
     "manaReduction",
@@ -2888,7 +2889,15 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.dotDamage) {
     await applyDotDamage(skillUser, skillUser.buffs.dotDamage.strength, "HPダメージを受けている！");
   }
-  // 7-11. 継続MPダメージ処理
+  // 7-11. HP吸収処理
+  if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
+  if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.HPabsorption) {
+    const absorber = skillUser.buffs.HPabsorption.absorber; // applyDotDamageで死亡しHP吸収状態が削除されるより前に吸収者を取得しておく
+    const dotDamageValue = await applyDotDamage(skillUser, null, "HPを吸収された！", false, skillUser.buffs.HPabsorption.strength);
+    await sleep(250);
+    applyDamage(absorber, dotDamageValue, -1);
+  }
+  // 7-12. 継続MPダメージ処理
   if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.dotMPdamage) {
     await sleep(400);
@@ -2897,21 +2906,22 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
   }
-  // 7-12. MP吸収処理
+  // 7-13. MP吸収処理
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.MPabsorption) {
+    const absorber = skillUser.buffs.MPabsorption.absorber;
     await sleep(400);
     const dotDamageValue = skillUser.buffs.MPabsorption.strength;
     displayMessage(`${skillUser.name}は`, "MPを吸収された！");
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
     await sleep(250);
-    applyDamage(skillUser.buffs.MPabsorption.absorber, dotDamageValue, -1, true);
+    applyDamage(absorber, dotDamageValue, -1, true);
   }
   // 刻印・毒・継続の共通処理
-  async function applyDotDamage(skillUser, damageRatio, message, isRetribution = false) {
+  async function applyDotDamage(skillUser, damageRatio, message, isRetribution = false, fixedDamage = null) {
     if (skillUser.commandInput === "skipThisTurn") return;
     await sleep(400);
-    let dotDamageValue = Math.floor(skillUser.defaultStatus.HP * damageRatio);
+    let dotDamageValue = fixedDamage !== null ? fixedDamage : damageRatio ? Math.floor(skillUser.defaultStatus.HP * damageRatio) : 0;
     // damage上限
     if (skillUser.buffs.damageLimit && dotDamageValue > skillUser.buffs.damageLimit.strength) {
       dotDamageValue = skillUser.buffs.damageLimit.strength;
@@ -2923,9 +2933,10 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
     applyDamage(skillUser, dotDamageValue, 1, false, false, false, true, null); // skipDeathAbility
     // recentlyKilledを回収して死亡時発動を実行
     await checkRecentlyKilledFlagForPoison(skillUser);
+    return dotDamageValue;
   }
 
-  // 7-13. 被ダメージ時発動skill処理 反撃はリザオ等で蘇生しても発動するし、反射や死亡時で死んでも他に飛んでいくので制限はなし 敵限定で左から順に発動
+  // 7-14. 被ダメージ時発動skill処理 反撃はリザオ等で蘇生しても発動するし、反射や死亡時で死んでも他に飛んでいくので制限はなし 敵限定で左から順に発動
   for (const monster of parties[skillUser.enemyTeamID]) {
     if (!isBattleOver() && damagedMonsters[monster.monsterId]) {
       await executeCounterAbilities(monster, damagedMonsters[monster.monsterId]);
@@ -5728,7 +5739,7 @@ function addSkillOptions() {
     }
 
     // 系統特技を追加 (狭間を除く)
-    const noFamilySkillMonsters = ["ルバンカ", "降臨しんりゅう", "常夏少女ジェマ", "タイプG"];
+    const noFamilySkillMonsters = ["ルバンカ", "降臨しんりゅう", "降臨オメガ", "常夏少女ジェマ", "タイプG"];
     if (monster.race.length < 2 && ((monster.rank === 10 && familySkills) || familySkillsAvailableForRankS) && !noFamilySkillMonsters.includes(monster.name)) {
       const familySkillsToUse = [];
       if (monster.rank === 10 && familySkills) {
@@ -5765,7 +5776,7 @@ function addSkillOptions() {
     }
 
     // 超マス特技を追加
-    const noSuperOptMonsters = ["氷炎の化身", "降臨しんりゅう", "常夏少女ジェマ", "タイプG"];
+    const noSuperOptMonsters = ["氷炎の化身", "降臨しんりゅう", "降臨オメガ", "常夏少女ジェマ", "タイプG"];
     if (!monster.race.includes("超魔王") && !monster.race.includes("超伝説") && !noSuperOptMonsters.includes(monster.name) && monster.rank > 7) {
       superOptGroup = document.createElement("optgroup");
       superOptGroup.label = "超マス特技";
@@ -7195,6 +7206,32 @@ const monsters = [
     lsTarget: "all",
     AINormalAttack: [2, 3],
     resistance: { fire: 1, ice: 0, thunder: 1, wind: -1, io: 0.5, light: 1, dark: 0, poisoned: 1, asleep: 0.5, confused: 0, paralyzed: 0, zaki: 0, dazzle: 1, spellSeal: 1, breathSeal: 0 },
+  },
+  {
+    name: "降臨オメガ", //44 新生防御+50
+    id: "omega",
+    rank: 10,
+    race: ["???"],
+    weight: 25,
+    status: { HP: 904, MP: 358, atk: 324, def: 594, spd: 429, int: 297 },
+    initialSkill: ["超はどうほう", "アトミックレイ", "カウンター", "アレイズ"],
+    anotherSkills: ["メテオ", "エスナガ", "プリズムヴェール"],
+    defaultGear: "thunderCharm",
+    attribute: {
+      initialBuffs: {
+        metal: { keepOnDeath: true, strength: 0.75 },
+        mpCostMultiplier: { strength: 1.2, keepOnDeath: true },
+      },
+      permanentBuffs: {
+        spellReflection: { strength: 1.5, duration: 1, unDispellable: true, isKanta: true, dispellableByAbnormality: true },
+        danceReflection: { strength: 1.5, duration: 1, unDispellable: true, dispellableByAbnormality: true },
+        mindAndSealBarrier: { divineDispellable: true, duration: 1 }, // 上位解除可
+      },
+    },
+    seed: { atk: 50, def: 60, spd: 10, int: 0 },
+    ls: { HP: 1.2 },
+    lsTarget: "all",
+    resistance: { fire: 0, ice: 0, thunder: 1, wind: 0, io: 0, light: 1, dark: 0, poisoned: 0, asleep: 0, confused: 1, paralyzed: 1, zaki: 0, dazzle: 1, spellSeal: 1, breathSeal: 1 },
   },
   {
     name: "暗黒の魔人", //44
@@ -11131,6 +11168,19 @@ function getMonsterAbilities(monsterId) {
           },
         },
       ],
+    },
+    omega: {
+      attackAbilities: {
+        permanentAbilities: [
+          {
+            name: "古代兵器",
+            unavailableIf: (skillUser) => fieldState.turnNum < 3 || Math.random() < 0.34,
+            act: async function (skillUser) {
+              await executeSkill(skillUser, findSkillByName("超はどうほう"), null, true, false); // 状態異常check無視 封じcheck有効
+            },
+          },
+        ],
+      },
     },
     ankoku: {
       supportAbilities: {
@@ -15386,7 +15436,7 @@ const skill = [
     targetTeam: "enemy",
     MPcost: 38,
     damageByLevel: true,
-    appliedEffect: { MPabsorption: { strength: 50 }, tempted: { probability: 0.3571 } }, //todo: 反射時自分にMP吸収付与？
+    appliedEffect: { MPabsorption: { strength: 50 }, tempted: { probability: 0.3571 } },
   },
   {
     name: "破邪のベギラゴン",
@@ -16320,6 +16370,42 @@ const skill = [
     order: "preemptive",
     preemptiveGroup: 2,
     appliedEffect: { breathBarrier: { strength: 1 }, martialBarrier: { strength: 1, probability: 0.4 } },
+  },
+  {
+    name: "超はどうほう",
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 280,
+    element: "none",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 68,
+    ignoresubstitute: true,
+    followingSkill: "超はどうほう後半",
+  },
+  {
+    name: "超はどうほう後半",
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 150,
+    element: "thunder",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 0,
+    ignoresubstitute: true,
+    appliedEffect: { HPabsorption: { strength: 230 } },
+  },
+  {
+    name: "アトミックレイ",
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 195,
+    element: "thunder",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 63,
+    damageByLevel: true,
+    appliedEffect: "divineWave",
   },
   {
     name: "グランドショット",
@@ -17322,6 +17408,18 @@ const skill = [
     targetTeam: "ally",
     MPcost: 0,
     skipSkillSealCheck: true,
+    act: async function (skillUser, skillTarget) {
+      await executeRadiantWave(skillTarget, false, true); // マソも解除
+    },
+  },
+  {
+    name: "エスナガ",
+    type: "spell",
+    howToCalculate: "none",
+    element: "none",
+    targetType: "all",
+    targetTeam: "ally",
+    MPcost: 50,
     act: async function (skillUser, skillTarget) {
       await executeRadiantWave(skillTarget, false, true); // マソも解除
     },
@@ -21608,6 +21706,18 @@ const skill = [
     appliedEffect: { slashReflection: { strength: 1.5, duration: 1, removeAtTurnStart: true, unDispellable: true, dispellableByAbnormality: true } },
   },
   {
+    name: "カウンター",
+    type: "martial",
+    howToCalculate: "none",
+    element: "none",
+    targetType: "self",
+    targetTeam: "ally",
+    MPcost: 5,
+    order: "preemptive",
+    preemptiveGroup: 5,
+    appliedEffect: { slashReflection: { strength: 1.5, duration: 1, removeAtTurnStart: true, unDispellable: true, dispellableByAbnormality: true } },
+  },
+  {
     name: "やいばのまもり",
     type: "martial",
     howToCalculate: "none",
@@ -23936,6 +24046,10 @@ function displayBuffMessage(buffTarget, buffName, buffData) {
       start: `${buffTarget.name}は`,
       message: "HPとMPが回復しなくなった！",
     },
+    HPabsorption: {
+      start: `${buffTarget.name}は`,
+      message: "HPを 吸収されるようになった！",
+    },
     MPabsorption: {
       start: `${buffTarget.name}は`,
       message: "MPを 吸収されるようになった！",
@@ -24795,6 +24909,7 @@ function isSkillUnavailableForAI(skillName) {
     "究極の絶技",
     "いやしの雨",
     "きょうふのはもん",
+    "超はどうほう",
     "リザオラル", // isHealSkillを指定しているため、いのちだいじに使用特技に対象に選ばれることを仮防止
   ];
   const availableFollowingSkillsOnAI = ["必殺の双撃", "無双のつるぎ", "いてつくマヒャド"];
@@ -25587,6 +25702,7 @@ const abnormalityBuffNameList = {
   poisoned: "毒",
   dotDamage: "継続ダメージ",
   dotMPdamage: "継続MPダメージ",
+  HPabsorption: "HP吸収",
   MPabsorption: "MP吸収",
   healBlock: "回復封じ",
   reviveBlock: "蘇生封じ",
