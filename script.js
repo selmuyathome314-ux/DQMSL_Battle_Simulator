@@ -5703,6 +5703,11 @@ function addSkillOptions() {
   if (daikoraTargets.includes(monster.name)) {
     targetCollabSkills = daikoraSkills;
   }
+  const FFBESkills = ["メテオ", "アレイズ", "レイズ", "カウンター", "エスナガ", "プリズムヴェール", "ヘイスト", "雷電波", "ブラスター", "ホーリー", "フレア"];
+  const FFBETargets = ["氷炎の化身", "降臨しんりゅう", "狂える賢者ベヒーモス", "幻獣バハムート", "幻獣オーディン", "降臨オメガ"];
+  if (FFBETargets.includes(monster.name)) {
+    targetCollabSkills = FFBESkills;
+  }
   for (let j = 0; j < 4; j++) {
     const selectElement = document.getElementById(`skill${j}`);
     selectElement.innerHTML = "";
@@ -5739,8 +5744,8 @@ function addSkillOptions() {
     }
 
     // 系統特技を追加 (狭間を除く)
-    const noFamilySkillMonsters = ["ルバンカ", "降臨しんりゅう", "降臨オメガ", "常夏少女ジェマ", "タイプG"];
-    if (monster.race.length < 2 && ((monster.rank === 10 && familySkills) || familySkillsAvailableForRankS) && !noFamilySkillMonsters.includes(monster.name)) {
+    const noFamilySkillMonsters = ["ルバンカ", "常夏少女ジェマ", "タイプG"];
+    if (monster.race.length < 2 && ((monster.rank === 10 && familySkills) || familySkillsAvailableForRankS) && !noFamilySkillMonsters.includes(monster.name) && !FFBETargets.includes(monster.name)) {
       const familySkillsToUse = [];
       if (monster.rank === 10 && familySkills) {
         familySkillsToUse.push(...familySkills);
@@ -5776,8 +5781,8 @@ function addSkillOptions() {
     }
 
     // 超マス特技を追加
-    const noSuperOptMonsters = ["氷炎の化身", "降臨しんりゅう", "降臨オメガ", "常夏少女ジェマ", "タイプG"];
-    if (!monster.race.includes("超魔王") && !monster.race.includes("超伝説") && !noSuperOptMonsters.includes(monster.name) && monster.rank > 7) {
+    const noSuperOptMonsters = ["常夏少女ジェマ", "タイプG"];
+    if (!monster.race.includes("超魔王") && !monster.race.includes("超伝説") && !noSuperOptMonsters.includes(monster.name) && !FFBETargets.includes(monster.name) && monster.rank > 7) {
       superOptGroup = document.createElement("optgroup");
       superOptGroup.label = "超マス特技";
       for (const skill of superSkills) {
@@ -6399,7 +6404,6 @@ const monsters = [
     weight: 28,
     status: { HP: 842, MP: 346, atk: 341, def: 482, spd: 510, int: 550 },
     initialSkill: ["アルマゲスト", "しのルーレット", "タイダルウェイブ", "ほのお"],
-    anotherSkills: ["メテオ"],
     defaultGear: "metalNail",
     attribute: {
       initialBuffs: {
@@ -6595,7 +6599,7 @@ const monsters = [
     weight: 25,
     status: { HP: 760, MP: 305, atk: 547, def: 392, spd: 467, int: 422 },
     initialSkill: ["ヘルバーナー", "氷魔のダイヤモンド", "炎獣の爪", "プリズムヴェール"],
-    anotherSkills: ["真・氷魔の力", "アイスエイジ", "地獄の火炎", "雷電波", "アレイズ"],
+    anotherSkills: ["真・氷魔の力", "アイスエイジ", "地獄の火炎"],
     defaultGear: "genjiNail",
     attribute: {
       initialBuffs: {
@@ -7215,7 +7219,6 @@ const monsters = [
     weight: 25,
     status: { HP: 904, MP: 358, atk: 324, def: 594, spd: 429, int: 297 },
     initialSkill: ["超はどうほう", "アトミックレイ", "カウンター", "アレイズ"],
-    anotherSkills: ["メテオ", "エスナガ", "プリズムヴェール"],
     defaultGear: "thunderCharm",
     attribute: {
       initialBuffs: {
@@ -13804,6 +13807,34 @@ const skill = [
     ignoreReflection: true,
   },
   {
+    name: "ホーリー",
+    type: "spell",
+    howToCalculate: "int",
+    minInt: 200,
+    minIntDamage: 125,
+    maxInt: 400,
+    maxIntDamage: 250,
+    skillPlus: 1.15,
+    element: "light",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 88,
+  },
+  {
+    name: "フレア",
+    type: "spell",
+    howToCalculate: "int",
+    minInt: 200,
+    minIntDamage: 125,
+    maxInt: 400,
+    maxIntDamage: 250,
+    skillPlus: 1.15,
+    element: "fire",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 88,
+  },
+  {
     name: "真・ハーケンディストール",
     type: "slash",
     howToCalculate: "fix",
@@ -16604,6 +16635,19 @@ const skill = [
     description1: "味方1体を　最大HPで復活させる",
   },
   {
+    name: "レイズ",
+    type: "spell",
+    howToCalculate: "none",
+    element: "none",
+    targetType: "dead",
+    targetTeam: "ally",
+    MPcost: 54,
+    act: async function (skillUser, skillTarget) {
+      await reviveMonster(skillTarget, 0.5);
+    },
+    description1: "味方1体を　最大HPの50%で復活させる",
+  },
+  {
     name: "ザオラル",
     type: "spell",
     howToCalculate: "none",
@@ -18285,6 +18329,21 @@ const skill = [
     minInt: 100,
     minIntDamage: 50,
     maxInt: 600,
+    maxIntDamage: 160,
+    skillPlus: 1.15,
+    element: "io",
+    targetType: "random",
+    targetTeam: "enemy",
+    hitNum: 5,
+    MPcost: 38,
+  },
+  {
+    name: "ブラスター",
+    type: "spell",
+    howToCalculate: "int",
+    minInt: 100,
+    minIntDamage: 55,
+    maxInt: 400,
     maxIntDamage: 160,
     skillPlus: 1.15,
     element: "io",
@@ -21445,6 +21504,16 @@ const skill = [
   },
   {
     name: "ピオリム",
+    type: "spell",
+    howToCalculate: "none",
+    element: "none",
+    targetType: "all",
+    targetTeam: "ally",
+    MPcost: 21,
+    appliedEffect: { spdUp: { strength: 1 } },
+  },
+  {
+    name: "ヘイスト",
     type: "spell",
     howToCalculate: "none",
     element: "none",
