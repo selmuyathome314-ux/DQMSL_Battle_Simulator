@@ -2937,6 +2937,12 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
   async function applyDotDamage(skillUser, damageRatio, message, isRetribution = false, fixedDamage = null) {
     await sleep(400);
     let dotDamageValue = fixedDamage ?? (damageRatio ? Math.floor(skillUser.defaultStatus.HP * damageRatio) : 0);
+
+    // 固定ダメージ（fixedDamage）が指定されている場合のみメタル軽減を適用
+    if (fixedDamage) {
+      dotDamageValue = applyMetalReduction(dotDamageValue, skillUser, null, false);
+      dotDamageValue = Math.floor(dotDamageValue);
+    }
     // damage上限
     if (skillUser.buffs.damageLimit && dotDamageValue > skillUser.buffs.damageLimit.strength) {
       dotDamageValue = skillUser.buffs.damageLimit.strength;
@@ -4419,15 +4425,7 @@ function calculateDamage(
 
   //反射以外の場合にメタル処理
   if (!isReflection) {
-    if (skillTarget.buffs.metal) {
-      damage *= skillTarget.buffs.metal.strength;
-      //メタルキラー処理
-      if (skillUser.buffs.metalKiller && skillTarget.buffs.metal.isMetalKillerTarget) {
-        damage *= skillUser.buffs.metalKiller.strength;
-      }
-    } else if (skillTarget.buffs.goddessLightMetal) {
-      damage *= 0.75;
-    }
+    damage = applyMetalReduction(damage, skillTarget, skillUser, true);
   }
 
   // ダメージ軽減
@@ -4951,6 +4949,20 @@ function calculateDamage(
     damage = skillTarget.buffs.damageLimit.strength;
   }
   return { damage, isCriticalHit };
+}
+
+function applyMetalReduction(damage, skillTarget, skillUser = null, applyMetalKiller = true) {
+  let calculatedDamage = damage;
+  if (skillTarget.buffs.metal) {
+    calculatedDamage *= skillTarget.buffs.metal.strength;
+    // メタルキラー処理
+    if (applyMetalKiller && skillUser && skillUser.buffs.metalKiller && skillTarget.buffs.metal.isMetalKillerTarget) {
+      calculatedDamage *= skillUser.buffs.metalKiller.strength;
+    }
+  } else if (skillTarget.buffs.goddessLightMetal) {
+    calculatedDamage *= 0.75;
+  }
+  return calculatedDamage;
 }
 
 // みかわし処理対象か判定 賢さ物理以外のratio持ちは全て対象になっている それ以外に固定斬撃全て みかわし可能踊りも対象
@@ -7232,7 +7244,7 @@ const monsters = [
     rank: 10,
     race: ["???"],
     weight: 25,
-    status: { HP: 904, MP: 358, atk: 324, def: 594, spd: 429, int: 297 },
+    status: { HP: 930, MP: 369, atk: 335, def: 610, spd: 441, int: 307 },
     initialSkill: ["超はどうほう", "アトミックレイ", "カウンター", "アレイズ"],
     anotherSkills: ["はどうほう"],
     defaultGear: "genjiShield",
