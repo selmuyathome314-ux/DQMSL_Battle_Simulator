@@ -1646,11 +1646,15 @@ function applyBuff(buffTarget, newBuff, skillUser = null, isReflection = false, 
     }
 
     // countDownは上書きしない
-    if (buffName === "countDown" && buffTarget.buffs.countDown) {
+    if (buffName === "countDown" && currentBuff) {
       continue;
     }
     // 猛毒には毒を付与しない
     if (buffName === "poisoned" && currentBuff && !currentBuff.isLight && buffData.isLight) {
+      continue;
+    }
+    // 継続ダメージは禁忌のかくせいを通常で上書きしない それ以外はブラッドラッシュ含めてすべて後から付与されたものに置換（ratio比較はしない、はどうほう系と他種は不明）はどうほう同士・禁忌同士は上書き
+    if (buffName === "dotDamage" && currentBuff && currentBuff.isTabooAwakening && !buffData.isTabooAwakening) {
       continue;
     }
     // ラススタ 使用済みラススタ 砕けラススタ(toukon) 不屈 使用済み不屈 砕け不屈(toukon) とうこん 使用済みとうこん
@@ -2876,52 +2880,63 @@ async function postActionProcess(skillUser, executingSkill = null, executedSkill
     await executeSkill(skillUser, executingSkill);
   }
 
-  // 7-9. 毒処理
-  if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
-  if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.poisoned) {
-    const baseRatio = skillUser.buffs.poisoned.isLight ? 0.0625 : 0.125;
-    const poisonMessage = skillUser.buffs.poisoned.isLight ? "どくにおかされている！" : "もうどくにおかされている！";
-    const poisonDepth = skillUser.buffs.poisonDepth?.strength ?? 1;
-    await applyDotDamage(skillUser, baseRatio * poisonDepth, poisonMessage);
-  }
-  // 7-10. 継続ダメージ処理
-  if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
-  if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.dotDamage) {
-    await applyDotDamage(skillUser, skillUser.buffs.dotDamage.strength, "HPダメージを受けている！");
-  }
-  // 7-11. HP吸収処理
-  if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
-  if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.HPabsorption) {
-    const absorber = skillUser.buffs.HPabsorption.absorber; // applyDotDamageで死亡しHP吸収状態が削除されるより前に吸収者を取得しておく
-    const dotDamageValue = await applyDotDamage(skillUser, null, "HPを吸収された！", false, skillUser.buffs.HPabsorption.strength);
-    await sleep(250);
-    applyDamage(absorber, dotDamageValue, -1);
+  // 7-9〜11. 各種継続ダメージ・吸収処理（登録順に実行）
+  for (const key of Object.keys(skillUser.buffs)) {
+    // 1. 毒処理
+    if (key === "poisoned") {
+      if (isBattleOver()) return;
+      if (skillUser.commandInput === "skipThisTurn") break;
+      const poison = skillUser.buffs.poisoned;
+      const baseRatio = poison.isLight ? 0.0625 : 0.125;
+      const poisonMessage = poison.isLight ? "どくにおかされている！" : "もうどくにおかされている！";
+      const poisonDepth = skillUser.buffs.poisonDepth?.strength ?? 1;
+      await applyDotDamage(skillUser, baseRatio * poisonDepth, poisonMessage);
+    }    
+    // 2. 継続HPダメージ処理
+    else if (key === "dotDamage") {
+      if (isBattleOver()) return;
+      if (skillUser.commandInput === "skipThisTurn") break;
+      const dot = skillUser.buffs.dotDamage;
+      await applyDotDamage(skillUser, dot.ratio, "HPダメージを受けている！", false, dot.fixedDamage);
+    }
+    // 3. HP吸収処理
+    else if (key === "HPabsorption") {
+      if (isBattleOver()) return;
+      if (skillUser.commandInput === "skipThisTurn") break;
+      const abs = skillUser.buffs.HPabsorption;
+      const absorber = abs.absorber; // applyDotDamageで死亡しHP吸収状態が削除されるより前に取得
+      const dotDamageValue = await applyDotDamage(skillUser, null, "HPを吸収された！", false, abs.fixedDamage);
+      await sleep(250);
+      applyDamage(absorber, dotDamageValue / 2, -1); // 回復量は悪夢のさん奪・超はどうほうともにダメージの半分
+    }
   }
   // 7-12. 継続MPダメージ処理
   if (isBattleOver()) return; // 処理全体の実行前に戦闘終了check 毒や継続を実行せず即時return
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.dotMPdamage) {
+    const dotMP = skillUser.buffs.dotMPdamage;
+    const dotDamageValue = dotMP.strength;
     await sleep(400);
-    const dotDamageValue = skillUser.buffs.dotMPdamage.strength;
     displayMessage(`${skillUser.name}は`, "MPダメージを受けている！");
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
   }
   // 7-13. MP吸収処理
   if (skillUser.commandInput !== "skipThisTurn" && skillUser.buffs.MPabsorption) {
-    const absorber = skillUser.buffs.MPabsorption.absorber;
+    const absMP = skillUser.buffs.MPabsorption;
+    const absorber = absMP.absorber;
+    const dotDamageValue = absMP.strength;
     await sleep(400);
-    const dotDamageValue = skillUser.buffs.MPabsorption.strength;
     displayMessage(`${skillUser.name}は`, "MPを吸収された！");
     await sleep(200);
     applyDamage(skillUser, dotDamageValue, 1, true);
     await sleep(250);
     applyDamage(absorber, dotDamageValue, -1, true);
   }
-  // 刻印・毒・継続の共通処理
+
+  // 刻印・毒・継続（HP）の共通処理
   async function applyDotDamage(skillUser, damageRatio, message, isRetribution = false, fixedDamage = null) {
-    if (skillUser.commandInput === "skipThisTurn") return;
     await sleep(400);
-    let dotDamageValue = fixedDamage !== null ? fixedDamage : damageRatio ? Math.floor(skillUser.defaultStatus.HP * damageRatio) : 0;
+    let dotDamageValue = fixedDamage ?? (damageRatio ? Math.floor(skillUser.defaultStatus.HP * damageRatio) : 0);
     // damage上限
     if (skillUser.buffs.damageLimit && dotDamageValue > skillUser.buffs.damageLimit.strength) {
       dotDamageValue = skillUser.buffs.damageLimit.strength;
@@ -7219,7 +7234,9 @@ const monsters = [
     weight: 25,
     status: { HP: 904, MP: 358, atk: 324, def: 594, spd: 429, int: 297 },
     initialSkill: ["超はどうほう", "アトミックレイ", "カウンター", "アレイズ"],
-    defaultGear: "thunderCharm",
+    anotherSkills: ["はどうほう"],
+    defaultGear: "genjiShield",
+    defaultAiType: "いのちだいじに",
     attribute: {
       initialBuffs: {
         metal: { keepOnDeath: true, strength: 0.75 },
@@ -11179,7 +11196,7 @@ function getMonsterAbilities(monsterId) {
             name: "古代兵器",
             unavailableIf: (skillUser) => fieldState.turnNum < 3 || Math.random() < 0.34,
             act: async function (skillUser) {
-              await executeSkill(skillUser, findSkillByName("超はどうほう"), null, true, false); // 状態異常check無視 封じcheck有効
+              await executeSkill(skillUser, findSkillByName("はどうほう"), null, true, false); // 状態異常check無視 封じcheck有効
             },
           },
         ],
@@ -15136,7 +15153,7 @@ const skill = [
     act: async function (skillUser, skillTarget) {
       if (skillTarget.buffs.sacredBarrier) {
         delete skillTarget.buffs.sacredBarrier;
-        applyBuff(skillTarget, { dotDamage: { strength: 0.2 } });
+        applyBuff(skillTarget, { dotDamage: { ratio: 0.2 } });
       }
     },
   },
@@ -15786,7 +15803,7 @@ const skill = [
     selfAppliedEffect: async function (skillUser) {
       await sleep(150);
       for (const monster of parties[skillUser.enemyTeamID]) {
-        applyBuff(monster, { dotDamage: { strength: 0.2 } });
+        applyBuff(monster, { dotDamage: { ratio: 0.2 } });
       }
     },
     description1: "【反射無視】ランダムに6回　メラ系の息攻撃",
@@ -15806,7 +15823,7 @@ const skill = [
     selfAppliedEffect: async function (skillUser) {
       await sleep(150);
       for (const monster of parties[skillUser.enemyTeamID]) {
-        applyBuff(monster, { dotDamage: { strength: 0.2 } });
+        applyBuff(monster, { dotDamage: { ratio: 0.2 } });
       }
     },
     description1: "【反射無視】ランダムに7回　メラ系の息攻撃",
@@ -15827,7 +15844,7 @@ const skill = [
     selfAppliedEffect: async function (skillUser) {
       await sleep(150);
       for (const monster of parties[skillUser.enemyTeamID]) {
-        applyBuff(monster, { dotDamage: { strength: 0.2 } });
+        applyBuff(monster, { dotDamage: { ratio: 0.2 } });
       }
     },
     description2: "ランダムに9回　メラ系の息攻撃",
@@ -15907,7 +15924,7 @@ const skill = [
     targetType: "all",
     targetTeam: "enemy",
     MPcost: 55,
-    appliedEffect: { dotDamage: { strength: 0.2 }, healBlock: {} },
+    appliedEffect: { dotDamage: { ratio: 0.2 }, healBlock: {} },
   },
   {
     name: "憤怒の雷",
@@ -16424,7 +16441,30 @@ const skill = [
     targetTeam: "enemy",
     MPcost: 0,
     ignoresubstitute: true,
-    appliedEffect: { HPabsorption: { strength: 230 } },
+    appliedEffect: { HPabsorption: { fixedDamage: 230 } },
+  },
+  {
+    name: "はどうほう", // 自動発動用、特技プラスは乗らない 前半はみがわり有効
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 170,
+    element: "none",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 62,
+    followingSkill: "はどうほう後半",
+  },
+  {
+    name: "はどうほう後半",
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 100,
+    element: "thunder",
+    targetType: "all",
+    targetTeam: "enemy",
+    MPcost: 0,
+    ignoresubstitute: true,
+    appliedEffect: { dotDamage: { fixedDamage: 200 } },
   },
   {
     name: "アトミックレイ",
@@ -17554,7 +17594,7 @@ const skill = [
     preemptiveGroup: 1,
     act: function (skillUser, skillTarget) {
       if (skillTarget.race.includes("悪魔") && skillUser.monsterId !== skillTarget.monsterId) {
-        applyBuff(skillTarget, { powerCharge: { strength: 1.5 }, manaBoost: { strength: 1.5 }, dotDamage: { strength: 0.33 } });
+        applyBuff(skillTarget, { powerCharge: { strength: 1.5 }, manaBoost: { strength: 1.5 }, dotDamage: { ratio: 0.33, isTabooAwakening: true } });
       }
     },
   },
@@ -20372,7 +20412,7 @@ const skill = [
     targetTeam: "enemy",
     MPcost: 120,
     ignoreSubstitute: true,
-    appliedEffect: { dotDamage: { strength: 0.2 } },
+    appliedEffect: { dotDamage: { ratio: 0.2 } },
     specialMessage: function (skillUserName, skillName) {
       displayMessage(`${skillUserName}は`, "プロミネンスを呼び出した！");
     },
@@ -23987,7 +24027,7 @@ function hasEnoughMpForSkill(skillUser, executingSkill) {
   }
 }
 
-// 基本的に封じは有効: AI後追加skill 自動発動skillの一部(超はどうほう) 反撃系全て 竜の心臓 涼風(どちらかでも封じ状態ならば両方ミス)
+// 基本的に封じは有効: AI後追加skill 自動発動skillの一部(はどうほう) 反撃系全て 竜の心臓 涼風(どちらかでも封じ状態ならば両方ミス)
 // 封じ有効なもののうち、一部はskillではなくabilityのunavailableIfで指定: しのルーレット 極天地(どちらかでも封じ状態ならば両方ミス)
 // 封じ無視 引数指定: 自動発動skillの一部(真いては 防衛指令 アスゼロ? 堕天使? ブレイクシステム? 原始の嵐?) 一応死亡時(起爆装置 トラウマ 邪悪な残り火?) オーブのチカラ
 // 封じ無視 skipSkillSealCheckに直接指定: AI後追加skill(教団の光) 勇者の家庭教師
@@ -25111,7 +25151,7 @@ function clearResistanceDisplay(targetWrapper) {
 function displaySkillResistances(skillUser, originalSkillInfo) {
   clearAllSkillResistance();
   // originalがhowToCalc: "none"で、followingがnoneではないskillは対象を入れ替えて、適切な属性や反射表示を行う
-  const followingSkills = ["昇天斬り", "昇天のこぶし", "蘇生封じの術", "真・カラミティエンド", "グランドアビス", "修羅の闇", "ミナデイン", "ダークミナデイン", "クロスレジェンド", "真・闘気拳"];
+  const followingSkills = ["昇天斬り", "昇天のこぶし", "蘇生封じの術", "真・カラミティエンド", "グランドアビス", "修羅の闇", "ミナデイン", "ダークミナデイン", "クロスレジェンド", "真・闘気拳", "超はどうほう", "はどうほう"];
   const skillInfo = followingSkills.includes(originalSkillInfo.name) ? findSkillByName(originalSkillInfo.followingSkill) : originalSkillInfo;
 
   if (skillInfo.targetTeam !== "enemy" || skillInfo.targetType === "dead" || skillInfo.targetType === "self") {
