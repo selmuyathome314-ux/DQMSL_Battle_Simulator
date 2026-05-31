@@ -21539,6 +21539,23 @@ const skill = [
     },
   },
   {
+    name: "ブレイクウィンド",
+    type: "martial",
+    howToCalculate: "fix",
+    damage: 153,//133×1.15の単純切捨なら152だが、サーチの記載だと、深度0のダメは133.4?となっているようだ
+    element: "wind",
+    targetType: "random",
+    targetTeam: "enemy",
+    hitNum: 6,
+    MPcost: 64,
+    masoMultiplier: {
+      1: 2,
+      2: 3,
+      3: 4,
+      4: 5,
+    },
+  },  
+  {
     name: "カオスストーム",
     type: "spell",
     howToCalculate: "int",
