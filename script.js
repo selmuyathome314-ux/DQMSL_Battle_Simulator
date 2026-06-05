@@ -4656,6 +4656,9 @@ function calculateDamage(
     if (gearName === "ミルドラースのローブ体技錬金" && executingSkill.type === "martial") {
       damageModifier += 0.05;
     }
+        if ((gearName === "かがやく魔神剣") && executingSkill.element === "light") {
+      damageModifier += 0.4;
+    }
 
     // 特技錬金の反映
     const skillAlchemyTarget = skillUser.gear.skillAlchemy;
@@ -4688,6 +4691,10 @@ function calculateDamage(
 
   // デュラン
   if (skillUser.id === "dhuran" && (skillTarget.race.includes("超魔王") || skillTarget.race.includes("超伝説")) && hasEnoughMonstersOfType(parties[skillUser.teamID], "悪魔", 5)) {
+    damageModifier += 0.5;
+  }
+  // ダイ
+  if (skillUser.id === "dai" && (skillTarget.race.includes("超魔王") || skillTarget.race.includes("超伝説")) && hasEnoughMonstersOfType(parties[skillUser.teamID], "ドラゴン", 5)) {
     damageModifier += 0.5;
   }
   // 禁忌の封印
@@ -6469,31 +6476,34 @@ const monsters = [
     AINormalAttack: [2, 3],
     resistance: { fire: 0.5, ice: 1, thunder: 0.5, wind: 1, io: 0.5, light: 0, dark: 0.5, poisoned: 1, asleep: 0, confused: 0.5, paralyzed: 1, zaki: 0, dazzle: 0.5, spellSeal: 1, breathSeal: 1 },
   },
-  {
+     {
     name: "竜の騎士ダイ", //44
-    id: "dai",
+    id: "Dai",
     rank: 10,
     race: ["ドラゴン"],
     weight: 30,
-    status: { HP: 690, MP: 300, atk: 620, def: 527, spd: 563, int: 381 },
-    initialSkill: ["アバンストラッシュ", "空裂斬", "海波斬", "テンペストブレス"],
-    anotherSkills: ["大地斬"],
-    defaultGear: "ryujinNail",
+    status: { HP: 710, MP: 320, atk: 640, def: 547, spd: 583, int: 401 },
+    initialSkill: ["ダイストラッシュ", "空裂斬", "ドルオーラ", "スパークふんしゃ"],
+    anotherSkills: ["ギガストラッシュ","海波斬","大地斬"],
+    defaultGear: "dreamSword",
     attribute: {
       initialBuffs: {
-        lightBreak: { keepOnDeath: true, strength: 2 },
-        isUnbreakable: { keepOnDeath: true, left: 1, name: "不屈の闘志" },
+        lightBreak: { keepOnDeath: true, strength: 3 },
         mindAndSealBarrier: { divineDispellable: true, duration: 3 },
       },
       evenTurnBuffs: {
-        powerCharge: { strength: 2 },
+        powerCharge: { strength: 2 }, manaBoost: { strength: 2 },
       },
+       appliedEffect: {
+      shamuAtk: { strength: 0.5 },
+      shamuDef: { strength: 0.5 },
     },
-    seed: { atk: 25, def: 0, spd: 95, int: 0 },
+    seed: { atk: 65, def: 0, spd: 55, int: 0 },
     ls: { atk: 1.2 },
     lsTarget: "all",
     AINormalAttack: [2],
     resistance: { fire: 0.5, ice: 1, thunder: 0.5, wind: 1, io: 0.5, light: -1, dark: 1, poisoned: 1, asleep: 0.5, confused: 1, paralyzed: 0, zaki: 0, dazzle: 0.5, spellSeal: 1, breathSeal: 1 },
+  },
   },
    {
     name: "新生転生竜の騎士ダイ", //44
