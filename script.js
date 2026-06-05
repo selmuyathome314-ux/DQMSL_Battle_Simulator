@@ -6498,12 +6498,13 @@ const monsters = [
       shamuAtk: { strength: 0.5 },
       shamuDef: { strength: 0.5 },
     },
+    },
     seed: { atk: 65, def: 0, spd: 55, int: 0 },
     ls: { atk: 1.2 },
     lsTarget: "all",
     AINormalAttack: [2],
     resistance: { fire: 0.5, ice: 1, thunder: 0.5, wind: 1, io: 0.5, light: -1, dark: 1, poisoned: 1, asleep: 0.5, confused: 1, paralyzed: 0, zaki: 0, dazzle: 0.5, spellSeal: 1, breathSeal: 1 },
-   },
+   
   },
   {
     name: "新生転生竜の騎士ダイ", //44
