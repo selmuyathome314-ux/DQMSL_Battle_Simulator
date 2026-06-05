@@ -6476,7 +6476,7 @@ const monsters = [
     AINormalAttack: [2, 3],
     resistance: { fire: 0.5, ice: 1, thunder: 0.5, wind: 1, io: 0.5, light: 0, dark: 0.5, poisoned: 1, asleep: 0, confused: 0.5, paralyzed: 1, zaki: 0, dazzle: 0.5, spellSeal: 1, breathSeal: 1 },
   },
-     {
+  {
     name: "竜の騎士ダイ", //44
     id: "dai",
     rank: 10,
@@ -6505,7 +6505,7 @@ const monsters = [
     resistance: { fire: 0.5, ice: 1, thunder: 0.5, wind: 1, io: 0.5, light: -1, dark: 1, poisoned: 1, asleep: 0.5, confused: 1, paralyzed: 0, zaki: 0, dazzle: 0.5, spellSeal: 1, breathSeal: 1 },
    },
   },
-   {
+  {
     name: "新生転生竜の騎士ダイ", //44
     id: "newDai",
     rank: 10,
