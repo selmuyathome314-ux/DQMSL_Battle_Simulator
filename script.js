@@ -14020,7 +14020,7 @@ const skill = [
     ignoreReflection: true,
     ignoreTypeEvasion: true,
     RaceBane: ["???", "超魔王"],
-    RaceBaneValue: 4,
+    RaceBaneValue: 2,
     followingSkill: "ダイストラッシュ後半",
   },
   {
@@ -14035,7 +14035,7 @@ const skill = [
     ignoreProtection: true,
     ignoreGuard: true,
     RaceBane: ["???", "超魔王"],
-    RaceBaneValue: 4,
+    RaceBaneValue: 2,
   },
   {
     name: "ギガストラッシュ",
